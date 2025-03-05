@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ORB.POND"
+version = "0.0.0"
+description = "Final project for PHYS3120 Spring 2025"
+authors = [{ name = "Matvey Shakula", email = "matvey@gatech.edu" }]
+requires-python = ">=3.10"
+dependencies = ["numpy", "pygame"]

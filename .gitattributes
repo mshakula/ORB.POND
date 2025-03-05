@@ -1,0 +1,19 @@
+# .gitattributes
+
+*.zip binary
+*.pdf binary
+
+# image
+*.png binary
+*.jpg binary
+*.bmp binary
+*.gif binary
+*.ico binary
+
+# audio
+*.wav binary
+*.mp3 binary
+*.aac binary
+*.flac binary
+
+
