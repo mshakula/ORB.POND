@@ -1,4 +1,4 @@
-![](ORB.POND.png)
+![](assets/ORB.POND.png)
 
 # ORB.POND: GATech PHYS3120 Spring 2025
 
