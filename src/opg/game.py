@@ -1,7 +1,7 @@
 import os
 import pygame
 
-import assets
+from . import assets
 
 # Initialize pygame
 pygame.init()
@@ -14,16 +14,36 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (100, 100, 100)
 BLUE = (0, 0, 255)
+FONT_NAME = "Berlin"
 
 
 class Button:
     def __init__(self, x, y, width, height, text, color, hover_color):
+        # Store position as ratio of screen size for easy scaling
+        self.x_ratio = x / SCREEN_WIDTH
+        self.y_ratio = y / SCREEN_HEIGHT
+        self.width_ratio = width / SCREEN_WIDTH
+        self.height_ratio = height / SCREEN_HEIGHT
+
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.color = color
         self.hover_color = hover_color
         self.is_hovered = False
-        self.font = pygame.font.SysFont(None, 32)
+        self.font = pygame.font.SysFont(FONT_NAME, 32)
+        self.font_size = 32
+
+    def update_size(self, screen_width, screen_height):
+        """Update button size and position based on screen dimensions"""
+        x = int(self.x_ratio * screen_width)
+        y = int(self.y_ratio * screen_height)
+        width = int(self.width_ratio * screen_width)
+        height = int(self.height_ratio * screen_height)
+        self.rect = pygame.Rect(x, y, width, height)
+
+        # Scale font size based on screen height
+        self.font_size = max(16, int(32 * (screen_height / SCREEN_HEIGHT)))
+        self.font = pygame.font.SysFont(FONT_NAME, self.font_size)
 
     def draw(self, surface):
         color = self.hover_color if self.is_hovered else self.color
@@ -46,25 +66,75 @@ class Menu:
     def __init__(self, screen):
         self.screen = screen
         self.running = True
+        self.screen_width, self.screen_height = self.screen.get_size()
+
+        # Initialize buttons
         self.buttons = [
             Button(SCREEN_WIDTH // 2 - 100, 300, 200, 50, "Start Game", WHITE, GRAY),
             Button(SCREEN_WIDTH // 2 - 100, 370, 200, 50, "Settings", WHITE, GRAY),
             Button(SCREEN_WIDTH // 2 - 100, 440, 200, 50, "Quit", WHITE, GRAY)
         ]
 
-        # Load background image
-        self.bg_image = self.load_background()
+        # Load and scale background image
+        self.original_bg = self.load_background()
+        self.bg_image = pygame.transform.scale(
+            self.original_bg, (self.screen_width, self.screen_height))
+
+        # Update initial button sizes based on actual screen dimensions
+        self.update_ui_elements()
+
+        # Title font
+        self.title_font_size = 72
+        self.title_font = pygame.font.SysFont(FONT_NAME, self.title_font_size)
+        self.title_text = self.title_font.render(TITLE, True, WHITE)
+        self.title_position = (
+            self.screen_width //
+            2 -
+            self.title_text.get_width() //
+            2,
+            100)
 
     def load_background(self):
         image = pygame.image.load(assets.get_asset_path('ORB.POND.png'))
-        return pygame.transform.scale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        return image  # Store original image for rescaling
+
+    def update_ui_elements(self):
+        """Update UI elements based on current screen size"""
+        self.screen_width, self.screen_height = self.screen.get_size()
+
+        # Update button sizes and positions
+        for button in self.buttons:
+            button.update_size(self.screen_width, self.screen_height)
+
+        # Update title font size and position
+        self.title_font_size = max(36, int(72 * (self.screen_height / SCREEN_HEIGHT)))
+        self.title_font = pygame.font.SysFont(FONT_NAME, self.title_font_size)
+        self.title_text = self.title_font.render(TITLE, True, WHITE)
+        self.title_position = (self.screen_width //
+                               2 -
+                               self.title_text.get_width() //
+                               2, int(100 *
+                                      (self.screen_height /
+                                       SCREEN_HEIGHT)))
+
+        # Rescale background
+        self.bg_image = pygame.transform.scale(
+            self.original_bg, (self.screen_width, self.screen_height))
 
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.VIDEORESIZE:
+                # Handle window resize event
+                self.screen = pygame.display.set_mode(
+                    (event.w, event.h),
+                    pygame.RESIZABLE
+                )
+                self.update_ui_elements()
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.buttons[0].is_clicked(pygame.mouse.get_pos(), True):
                     print("Starting game...")
                     # Here you would transition to the actual game
@@ -85,10 +155,7 @@ class Menu:
         self.screen.blit(self.bg_image, (0, 0))
 
         # Draw title
-        font = pygame.font.SysFont(None, 72)
-        title_text = font.render(TITLE, True, WHITE)
-        self.screen.blit(title_text, (SCREEN_WIDTH // 2 -
-                         title_text.get_width() // 2, 100))
+        self.screen.blit(self.title_text, self.title_position)
 
         # Draw buttons
         for button in self.buttons:
@@ -101,15 +168,3 @@ class Menu:
             self.handle_events()
             self.update()
             self.render()
-
-
-def game_loop():
-    """Initialize and run the game."""
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption(TITLE)
-
-    menu = Menu(screen)
-    menu.run()
-
-    # Clean up pygame
-    pygame.quit()

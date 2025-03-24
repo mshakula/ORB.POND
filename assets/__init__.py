@@ -12,7 +12,7 @@ def get_asset_path(filename):
     :param filename: The name of the asset file
     :return: Path to the asset that can be used with pygame.image.load
     """
-    return str(importlib.resources.files("assets") / filename)
+    return str(importlib.resources.files(__package__) / filename)
 
 
 def list_available_assets():
@@ -20,13 +20,7 @@ def list_available_assets():
 
     :return: List of asset filenames
     """
-    return [p.name for p in importlib.resources.files(
-        "assets").iterdir() if p.is_file()]
-
-
-def __getitem__(self, item):
-    return get_asset_path(item)
-
-
-# Define paths to commonly used assets
-ORB_POND_IMAGE = get_asset_path("ORB.POND.png")
+    return [
+        p.name for p in importlib.resources.files(__package__).iterdir()
+        if p.is_file()
+    ]
