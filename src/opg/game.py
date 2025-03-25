@@ -2,6 +2,7 @@ import os
 import pygame
 
 from . import assets
+from .event_manager import EventManager
 
 # Initialize pygame
 pygame.init()
@@ -68,6 +69,9 @@ class Menu:
         self.running = True
         self.screen_width, self.screen_height = self.screen.get_size()
 
+        # Initialize event manager
+        self.event_manager = EventManager()
+
         # Initialize buttons
         self.buttons = [
             Button(SCREEN_WIDTH // 2 - 100, 300, 200, 50, "Start Game", WHITE, GRAY),
@@ -122,7 +126,9 @@ class Menu:
             self.original_bg, (self.screen_width, self.screen_height))
 
     def handle_events(self):
-        for event in pygame.event.get():
+        # Get events from event manager instead of directly from pygame
+        for event in self.event_manager.get():
+            # for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
 

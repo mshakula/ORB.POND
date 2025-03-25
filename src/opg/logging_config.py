@@ -6,6 +6,7 @@ import logging
 import functools
 import re
 import argparse
+import threading
 
 from typing import *
 
@@ -31,7 +32,7 @@ def common_logger_config(
     class DefaultFormatter(logging.Formatter):
         """Handle the default output formatting."""
 
-        _FORMAT = "%(relativeCreated)dms - %(name)s - %(levelname)s - (%(filename)s:%(lineno)d) %(message)s"
+        _FORMAT = "%(relativeCreated)dms - %(name)s[%(thread)d] - %(levelname)s - (%(filename)s:%(lineno)d) %(message)s"
 
         @classmethod
         def format(cls, record: Any) -> str:

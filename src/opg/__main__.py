@@ -1,9 +1,5 @@
 """
-Entry point for ORB.POND.GAME when run as a module.
-
-- Asyncio inspired by https://github.com/AlexElvers/pygame-with-asyncio.git
-  - Without it, there actually is a constant 100% CPU utilization.
-- Concurrent Futures are the better threading interface https://stackoverflow.com/a/61360215
+Entry point for the ORB.POND game.
 """
 
 import sys
@@ -12,6 +8,7 @@ import argparse
 import importlib
 import asyncio
 import concurrent.futures
+import queue
 
 from typing import *
 
@@ -19,21 +16,29 @@ from . import logging_config
 
 
 async def _main() -> None:
-    """Entry point for the installed script."""
+    """
+    Asynchronous entry point for ORB.POND.GAME.
+
+    - Asyncio inspired by https://github.com/AlexElvers/pygame-with-asyncio.git
+      - Without it, there actually is a constant 100% CPU utilization.
+    - Concurrent Futures are the better threading interface https://stackoverflow.com/a/61360215
+    """
 
     try:
-        parser = argparse.ArgumentParser(description="ORB.POND.GAME")
+        parser = argparse.ArgumentParser(description=__doc__)
         logging_config.set_argparse_common_log_options(parser)
         args = parser.parse_args()
         logging_config.common_logger_config_args(args)
     except Exception as e:
         raise RuntimeError("Failed to configure logging") from e
 
-    import pygame
+    # import pygame
     import pygame.display
     import pygame.image
+    from .event_manager import EventManager
 
-    pygame.display.init()
+    event_manager = EventManager()
+    await asyncio.sleep(1)
 
     # Set up the display
     screen: pygame.Surface = pygame.display.set_mode(
@@ -45,17 +50,31 @@ async def _main() -> None:
     )
     pygame.display.set_caption('ORB.POND.GAME')
 
-    # Start the game
-    game_module = importlib.import_module('.game', __package__)
-    main_menu = getattr(game_module, 'Menu')
-    main_menu(screen).run()
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     loop = asyncio.get_event_loop()
+    #     loop.set_default_executor(executor)
+
+    from .game import Menu
+    Menu(screen).run()
 
 
-def main():
+def main() -> None:
+    """
+    Entry point for the installed script.
+    """
+
     try:
-        asyncio.run(_main())
+        asyncio.run(_main(), debug=True)
+        # loop = asyncio.new_event_loop()
+        # asyncio.set_event_loop(loop)
+        # try:
+        #     loop.run_until_complete(_main())
+        # finally:
+        #     loop.close()
     except KeyboardInterrupt:
         logging.getLogger().warning("Keyboard interrupt!")
+    except RuntimeWarning as e:
+        logging.getLogger().warning(e, exc_info=e)
     except Exception as e:
         logging.getLogger().critical("Unhandled exception", exc_info=e)
         sys.exit(1)
