@@ -3,6 +3,7 @@ import math
 import random
 import sys
 import os
+from asteroid import Asteroid  # Import the Asteroid class
 
 # --- Constants ---
 WIDTH, HEIGHT = 1280, 720  # Larger screen size
@@ -25,20 +26,19 @@ PICTURE_MARGIN = 100
 # Georgia Tech Gold color (RGB)
 GEORGIA_TECH_GOLD = (179, 163, 105)
 
-
 # --- Helper Functions for RK4 ---
 def acceleration(state, asteroids):
     x, y, _, _ = state
     ax, ay = 0, 0
     for asteroid in asteroids:
-        ax_, ay_ = asteroid["pos"]
+        ax_, ay_ = asteroid.pos  # Use asteroid.pos attribute
         dx = ax_ - x
         dy = ay_ - y
         r_sq = dx * dx + dy * dy
         if r_sq < 1:
             r_sq = 1
         r = math.sqrt(r_sq)
-        a = G * asteroid["mass"] / r_sq
+        a = G * asteroid.mass / r_sq
         ax += a * (dx / r)
         ay += a * (dy / r)
     return ax, ay
@@ -82,9 +82,7 @@ try:
     canon_img = pygame.image.load(
         os.path.join(os.path.dirname(__file__), "assets", "canon.png")
     ).convert_alpha()
-    canon_img = pygame.transform.scale(
-        canon_img, (80, 80)
-    )  # Slightly larger for the bigger screen
+    canon_img = pygame.transform.scale(canon_img, (80, 80))
 
     satellite_img = pygame.image.load(
         os.path.join(os.path.dirname(__file__), "assets", "satellite.png")
@@ -112,9 +110,7 @@ try:
         os.path.join(os.path.dirname(__file__), "assets", "camera.wav")
     )
 except Exception as e:
-    print(
-        "Error loading assets. Ensure all required images and sounds are in the correct folder."
-    )
+    print("Error loading assets. Ensure all required images and sounds are in the correct folder.")
     sys.exit()
 
 
@@ -122,18 +118,14 @@ except Exception as e:
 def get_random_position_for_asteroid(size, existing_asteroids):
     max_attempts = 1000
     for _ in range(max_attempts):
-        x = random.randint(
-            WIDTH // 2 + size // 2 + EDGE_MARGIN, WIDTH - EDGE_MARGIN - size // 2
-        )
+        x = random.randint(WIDTH // 2 + size // 2 + EDGE_MARGIN, WIDTH - EDGE_MARGIN - size // 2)
         y = random.randint(EDGE_MARGIN + size // 2, HEIGHT - EDGE_MARGIN - size // 2)
         overlap = False
         for a in existing_asteroids:
-            ax, ay = a["pos"]
-            asize = a["size"]
+            ax, ay = a.pos  # Use the Asteroid object's pos attribute
+            asize = a.size
             # Increase required separation by adding the satellite's width so it can fit between
-            required_separation = (
-                ((size + asize) // 2) + ASTEROID_BUFFER + satellite_img.get_width()
-            )
+            required_separation = (((size + asize) // 2) + ASTEROID_BUFFER + satellite_img.get_width())
             if math.hypot(x - ax, y - ay) < required_separation:
                 overlap = True
                 break
@@ -149,18 +141,10 @@ def init_asteroids():
     asteroid_imgs = random.sample(asteroid_imgs_full, 2)
     for img in asteroid_imgs:
         size = random.randint(80, 150)
-        scaled_img = pygame.transform.scale(img, (size, size))
         pos = get_random_position_for_asteroid(size, asteroids)
-        mass = (size * size) / 10  # Mass proportional to area
-        asteroids.append(
-            {
-                "img": scaled_img,
-                "pos": pos,
-                "mass": mass,
-                "pictured": False,
-                "size": size,
-            }
-        )
+        # Create an Asteroid instance instead of a dictionary.
+        asteroid = Asteroid(img, pos, size)
+        asteroids.append(asteroid)
     return asteroids
 
 
@@ -204,11 +188,7 @@ while running:
         if game_finished and event.type == pygame.KEYDOWN:
             reset_game()
         # Launch satellite only if game is not finished and not already launched.
-        if (
-            not game_finished
-            and event.type == pygame.MOUSEBUTTONDOWN
-            and not satellite_launched
-        ):
+        if not game_finished and event.type == pygame.MOUSEBUTTONDOWN and not satellite_launched:
             mouse_x, mouse_y = pygame.mouse.get_pos()
             dx = mouse_x - CANON_POS[0]
             dy = mouse_y - CANON_POS[1]
@@ -222,18 +202,11 @@ while running:
     # Draw background
     screen.blit(background_img, (0, 0))
 
-    # Draw asteroids
+    # Draw asteroids using the Asteroid class's draw method
     for asteroid in asteroids:
-        x, y = asteroid["pos"]
-        screen.blit(
-            asteroid["img"],
-            (
-                x - asteroid["img"].get_width() // 2,
-                y - asteroid["img"].get_height() // 2,
-            ),
-        )
+        asteroid.draw(screen)
 
-    # Draw canon platform (if you still want that drawn)
+    # Draw canon platform
     platform_width = 120
     platform_height = 10
     platform_x = CANON_POS[0] - platform_width // 2
@@ -264,53 +237,46 @@ while running:
         )
         screen.blit(info_text, (EDGE_MARGIN, EDGE_MARGIN // 2))
 
-    # Only update simulation if the game is not finished
+    # Update simulation if the game is not finished
     if not game_finished and satellite_launched and satellite_state:
         satellite_state = rk4_step(satellite_state, DT, asteroids)
         x, y, vx, vy = satellite_state
 
-        # Only start tracking the path after the satellite has moved 50 pixels from launch
+        # Start tracking the path after the satellite has moved 50 pixels from launch
         if math.hypot(x - CANON_POS[0], y - CANON_POS[1]) > 50:
             satellite_path.append((x, y))
 
-        # Collision detection: if the satellite collides with an asteroid, game over immediately.
+        # Collision detection and picture-taking
         satellite_radius = satellite_img.get_width() // 2
         for asteroid in asteroids:
-            ax, ay = asteroid["pos"]
-            asteroid_radius = asteroid["size"] // 2
+            ax, ay = asteroid.pos
+            asteroid_radius = asteroid.size // 2
             distance = math.hypot(x - ax, y - ay)
             if distance < (satellite_radius + asteroid_radius):
                 final_message = "Collision! You lost."
                 game_finished = True
                 break
 
-            # Picture condition: if satellite gets close enough to take a picture
             picture_threshold = satellite_radius + asteroid_radius + PICTURE_MARGIN
-            if distance < picture_threshold and not asteroid["pictured"]:
-                asteroid["pictured"] = True
+            if distance < picture_threshold and not asteroid.pictured:
+                asteroid.pictured = True
                 picture_count += 1
                 camera_flash_sound.play()
 
         # Check if satellite goes off-screen.
         if x < 0 or x > WIDTH or y < 0 or y > HEIGHT:
-            # Game ends only upon exit.
             if not game_finished:
                 if picture_count == len(asteroids):
                     final_message = "You win! All pictures taken."
                 else:
-                    final_message = (
-                        f"Game Over! Pictures taken: {picture_count}/{len(asteroids)}"
-                    )
+                    final_message = f"Game Over! Pictures taken: {picture_count}/{len(asteroids)}"
             game_finished = True
 
-        # Draw satellite if still on screen and game is not finished
+        # Draw the satellite if still on screen and game is not finished
         if not game_finished:
             screen.blit(
                 satellite_img,
-                (
-                    x - satellite_img.get_width() // 2,
-                    y - satellite_img.get_height() // 2,
-                ),
+                (x - satellite_img.get_width() // 2, y - satellite_img.get_height() // 2),
             )
 
     # Display picture counter on screen
@@ -324,10 +290,7 @@ while running:
         msg = font.render(final_message, True, (255, 255, 0))
         screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2))
         restart_msg = font.render("Press any key to restart.", True, (255, 255, 255))
-        screen.blit(
-            restart_msg,
-            (WIDTH // 2 - restart_msg.get_width() // 2, HEIGHT // 2 + 40),
-        )
+        screen.blit(restart_msg, (WIDTH // 2 - restart_msg.get_width() // 2, HEIGHT // 2 + 40))
 
     pygame.display.flip()
 
