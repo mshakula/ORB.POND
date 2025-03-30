@@ -32,11 +32,13 @@ def common_logger_config(
     class DefaultFormatter(logging.Formatter):
         """Handle the default output formatting."""
 
-        _FORMAT = "%(relativeCreated)dms - %(name)s[%(thread)d] - %(levelname)s - (%(filename)s:%(lineno)d) %(message)s"
+        _FORMAT = "%(relativeCreated)dms - %(name)s[{native_thread_id}] - %(levelname)s - (%(filename)s:%(lineno)d) %(message)s"
 
         @classmethod
         def format(cls, record: Any) -> str:
-            return logging.Formatter(cls._FORMAT).format(record)
+            return logging.Formatter(
+                cls._FORMAT.format(
+                    native_thread_id=threading.get_native_id())).format(record)
 
     class ColoredFormatter(DefaultFormatter):
         """From https://stackoverflow.com/a/56944256 and https://stackoverflow.com/a/33206814"""
