@@ -9,9 +9,8 @@ import queue
 import pygame.event
 import logging
 import threading
-import concurrent.futures
 import functools
-import signal
+import janus
 
 from typing import *
 
@@ -27,43 +26,63 @@ class EventSubscription:
 
         :param event_manager: The event manager to subscribe to.
         """
+
         self._event_manager = event_manager
+        self._active = False
+        self._event_list = set()
 
-        raise NotImplementedError()
-
-    def __enter__(self) -> EventSubscription:
-        """Enter the context manager, activating the subscription.
+    async def __aenter__(self) -> EventSubscription:
+        """Activate the subscription.
         """
 
-        raise NotImplementedError()
+        with self._event_manager._subscriptions_lock:
+            self._event_manager._subscriptions[self] = janus.Queue()
+            self._active = True
+        return self
 
-    def __exit__(self, exc_type: type, exc_value: Any, traceback: Any) -> None:
-        """Exit the context manager, deactivating the subscription.
+    async def __aexit__(self, exc_type: type, exc_value: Any, traceback: Any) -> None:
+        """Deactivate the subscription.
         """
 
-        raise NotImplementedError()
+        with self._event_manager._subscriptions_lock:
+            x = self._event_manager._subscriptions[self]
+            del self._event_manager._subscriptions[self]
+            self._active = False
+        await x.aclose()
 
-    def subscribe(self, event_list: Iterable[int]) -> EventSubscription:
+    def __iter__(self) -> Iterable[int]:
+        return iter(self._event_list)
+
+    def subscribe(self, *event_list) -> EventSubscription:
         """Subscribe to a specific event type.
         """
 
-        raise NotImplementedError()
-
+        if self._active:
+            with self._event_manager._subscriptions_lock:
+                self._event_list.update(event_list)
+        else:
+            self._event_list.update(event_list)
         return self
 
-    def unsubscribe(self, event_list: Iterable[int]) -> EventSubscription:
+    def unsubscribe(self, *event_list) -> EventSubscription:
         """Unsubscribe from a specific event type.
         """
 
-        raise NotImplementedError()
-
+        if self._active:
+            with self._event_manager._subscriptions_lock:
+                self._event_list.difference_update(event_list)
+        else:
+            self._event_list.difference_update(event_list)
         return self
 
     async def get(self) -> pygame.event.Event:
         """Get the next subscribed event.
         """
 
-        raise NotImplementedError()
+        if not self._active:
+            raise RuntimeError("Cannot get events from an inactive subscription.")
+
+        return await self._event_manager._subscriptions[self].async_q.get()
 
 
 class EventManager:
@@ -103,6 +122,8 @@ class EventManager:
         self._loop = None
         self._running = False
         self._timeout_ms = timeout_ms
+        self._subscriptions: Mapping[EventSubscription: queue.Queue] = {}
+        self._subscriptions_lock = threading.Lock()
 
     def __enter__(self) -> EventManager:
 
@@ -124,9 +145,7 @@ class EventManager:
 
         assert threading.current_thread() is self._thread
         assert not self._loop.is_running()
-
-        # raise NotImplementedError(
-        #     "Notify subscribers of shutdown, and do other cleanup")
+        assert not self._running
 
         self._loop.close()
         self._loop = None
@@ -166,7 +185,10 @@ class EventManager:
                     event = pygame.event.wait(self._timeout_ms)
                     if event.type != pygame.NOEVENT:
                         self._LOGGER.debug(f"Processing event: {event}")
-                        # raise NotImplementedError("Notify subscribers of event")
+                        with self._subscriptions_lock:
+                            for subscription, queue in self._subscriptions.items():
+                                if event.type in subscription:
+                                    queue.sync_q.put(event)
                     else:
                         pass
                     await asyncio.sleep(0)  # Yield to other tasks
@@ -175,8 +197,7 @@ class EventManager:
 
         self._loop.run_until_complete(_process_events())
 
-    def call(self, callback: Any, *args: Any, **
-             kwargs: Any) -> concurrent.futures.Future:
+    def call(self, callback: Any, *args: Any, **kwargs: Any) -> asyncio.Future:
         """Arrange for a callback to be called in the main thread.
 
         There isn't an actual magic in the wrap_future() function:

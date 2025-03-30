@@ -19,6 +19,10 @@ async def _main(event_manager: "EventManager") -> None:
     Asynchronous entry point for ORB.POND.GAME.
     """
 
+    # This is the top-level function, so set the default event loop for this thread
+    # to be the running loop.
+    asyncio.set_event_loop(asyncio.get_running_loop())
+
     import pygame
 
     logging.getLogger().info("Starting ORB.POND.GAME")
@@ -38,9 +42,11 @@ async def _main(event_manager: "EventManager") -> None:
     try:
         logging.getLogger().debug("ARRANGING DISPLAY")
         display = await event_manager.call(create_display)
-        logging.getLogger().debug("SLEEPING")
-        await asyncio.sleep(10)
-        logging.getLogger().debug("DONE SLEEPING")
+
+        async with event_manager.get_subscription().subscribe(pygame.QUIT) as sub:
+            await sub.get()
+            logging.getLogger().info("QUIT event received")
+
     except asyncio.CancelledError:
         logging.getLogger().info("Cancelled")
     except BaseException as e:
@@ -79,22 +85,23 @@ def main() -> None:
         # Spawn an asyncio thread for actual game logic, and run event loop
         # in main thread.
         with event_manager as em:
-            child_loop = asyncio.new_event_loop()
-            child_task = child_loop.create_task(_main(em), name="_main")
-            child_thread = threading.Thread(
-                target=child_loop.run_until_complete,
-                args=[child_task],
-                name="GameThread")
+            logging.getLogger().info("Started event manager")
+            game_loop = asyncio.new_event_loop()
+            game_task = game_loop.create_task(_main(em), name="_main")
+            game_thread = threading.Thread(
+                target=game_loop.run_until_complete,
+                args=[game_task],
+                name="game_thread")
             try:
-                child_thread.start()
+                game_thread.start()
                 em.process_events()
             except KeyboardInterrupt:
                 logging.getLogger().warning("Keyboard interrupt!")
             finally:
                 # Canceling the task has to be done from its own event loop
-                child_loop.call_soon_threadsafe(child_task.cancel)
-                logging.getLogger().info(f"Waiting for {child_thread.name} to finish.")
-                child_thread.join()
+                game_loop.call_soon_threadsafe(game_task.cancel)
+                logging.getLogger().info(f"Waiting for {game_thread.name} to finish.")
+                game_thread.join()
 
     except KeyboardInterrupt:
         logging.getLogger().warning("Keyboard interrupt!")
