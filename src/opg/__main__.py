@@ -3,7 +3,6 @@ Entry point for the ORB.POND game.
 """
 
 import threading
-import os
 import sys
 import logging
 import argparse
@@ -23,17 +22,29 @@ async def _main(event_manager: "EventManager") -> None:
     import pygame
 
     logging.getLogger().info("Starting ORB.POND.GAME")
-    try:
-        # Set up the display
-        screen: pygame.Surface = pygame.display.set_mode(
+
+    # Set up the display
+    async def create_display() -> pygame.Surface:
+        disp = pygame.display.set_mode(
             size=(800, 600),
             flags=pygame.SCALED | pygame.SRCALPHA | pygame.DOUBLEBUF | pygame.RESIZABLE,
             depth=0,
             display=0,
-            vsync=1
-        )
+            vsync=1)
         pygame.display.set_caption('ORB.POND.GAME')
+        logging.getLogger().debug("DISPLAY CREATED")
+        return disp
+
+    try:
+        logging.getLogger().debug("ARRANGING DISPLAY")
+        display = await event_manager.call(create_display)
+        logging.getLogger().debug("SLEEPING")
         await asyncio.sleep(10)
+        logging.getLogger().debug("DONE SLEEPING")
+    except asyncio.CancelledError:
+        logging.getLogger().info("Cancelled")
+    except BaseException as e:
+        logging.getLogger().critical("Unhandled exception", exc_info=e)
     finally:
         logging.getLogger().info("Shutting down ORB.POND.GAME")
         event_manager.shutdown()
@@ -57,32 +68,40 @@ def main() -> None:
             import pygame
 
             f.seek(0)
-            while (l := f.readline().decode().strip()):
-                logging.getLogger().info(l)
+            for line in f.read().decode().strip().split("\n"):
+                logging.getLogger().info(line)
 
+        # Create the event manager
         from .event_manager import EventManager
-
         event_manager = EventManager()
-
         logging.getLogger().info("Initialized event manager")
 
-        # Spawn a thread for actual game logic, while running event loop in main thread
-
-        thread = threading.Thread(target=asyncio.run, args=(_main(event_manager),))
-        thread.start()
+        # Spawn an asyncio thread for actual game logic, and run event loop
+        # in main thread.
         with event_manager as em:
-            em.process_events()
-        thread.join()
+            child_loop = asyncio.new_event_loop()
+            child_task = child_loop.create_task(_main(em), name="_main")
+            child_thread = threading.Thread(
+                target=child_loop.run_until_complete,
+                args=[child_task],
+                name="GameThread")
+            try:
+                child_thread.start()
+                em.process_events()
+            except KeyboardInterrupt:
+                logging.getLogger().warning("Keyboard interrupt!")
+            finally:
+                # Canceling the task has to be done from its own event loop
+                child_loop.call_soon_threadsafe(child_task.cancel)
+                logging.getLogger().info(f"Waiting for {child_thread.name} to finish.")
+                child_thread.join()
 
     except KeyboardInterrupt:
         logging.getLogger().warning("Keyboard interrupt!")
-    except RuntimeWarning as e:
-        logging.getLogger().warning(e, exc_info=e)
-    except Exception as e:
+    except BaseException as e:
         logging.getLogger().critical("Unhandled exception", exc_info=e)
         sys.exit(1)
     finally:
-        logging.getLogger().info("Final cleanup")
         sys.exit(0)
 
 

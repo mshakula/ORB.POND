@@ -87,20 +87,22 @@ class EventManager:
     - https://stackoverflow.com/questions/28866651/python-concurrent-futures-using-subprocess-with-a-callback
     """
 
-    def __init__(self):
-        self._LOGGER = logging.getLogger(__name__ + f".EventManager({id(self)})")
-        self._thread = threading.current_thread()
-
-        self.running = False
+    def __init__(self, timeout_ms: float = 10) -> None:
+        """Create a new event manager. Does not enable it or start the event loop.
+        """
 
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("EventManager must be created in the main thread.")
 
-        if pygame.display.get_init():
-            raise RuntimeError(
-                "EventManager must be created before pygame.display.init()")
+        if timeout_ms <= 0:
+            raise ValueError("Timeout must be greater than zero.")
 
-        pygame.display.init()
+        self._LOGGER = logging.getLogger(
+            f"{self.__class__.__qualname__}#{id(self)}")
+        self._thread = threading.current_thread()
+        self._loop = None
+        self._running = False
+        self._timeout_ms = timeout_ms
 
     def __enter__(self) -> EventManager:
 
@@ -108,29 +110,45 @@ class EventManager:
             raise RuntimeError(
                 "EventManager can only be entered in the thread it was created in.")
 
-        self.running = True
+        if pygame.display.get_init():
+            raise RuntimeError(
+                "EventManager.__enter__ must be allowed to call pygame.display.init()")
+        else:
+            pygame.display.init()
+
+        self._loop = asyncio.new_event_loop()
 
         return self
 
     def __exit__(self, exc_type: type, exc_value: Any, traceback: Any) -> None:
 
-        assert threading.current_thread() is self._thread()
+        assert threading.current_thread() is self._thread
+        assert not self._loop.is_running()
 
-        self._LOGGER.debug("__exit__")
+        # raise NotImplementedError(
+        #     "Notify subscribers of shutdown, and do other cleanup")
 
-        if self.running:
-            self._LOGGER.warning(
-                "EventManager exited without being explicitly shutdown.")
-
-        self._LOGGER.info("Shutting down.")
+        self._loop.close()
+        self._loop = None
 
         pygame.display.quit()
 
-        raise NotImplementedError(
-            "Notify subscribers of shutdown, and do other cleanup")
-
     def process_events(self) -> None:
         """Process all events in the pygame event queue.
+
+        This function creates an asyncio event loop, and schedules a task to process
+        events from the pygame event queue. Running in an event loop allows other
+        threads to schedule tasks that need to be run in the main thread, such as
+        operations involving window setup.
+
+        We have to do this timeout-based event loop because pygame.event.wait() is a
+        blocking call, and in python signals get processed not at the C level, but at
+        a level higher than that, meaning we have to wait until blocking calls complete.
+        See more: https://stackoverflow.com/a/25677040
+
+        TODO: maybe we can rip out the asyncio event loop, and create a custom pygame
+        event that can be used to request the main thread to do something. The current
+        approach is nice enough though because we get the asyncio scheduler.
 
         Must be run in the main thread.
         """
@@ -139,16 +157,59 @@ class EventManager:
             raise RuntimeError(
                 "EventManager.process_events() must be called in the thread it was created in.")
 
-        while self.running:
-            event = pygame.event.wait()
-            raise NotImplementedError("Notify subscribers of event")
+        assert self._loop is not None
+
+        async def _process_events():
+            try:
+                self._running = True
+                while self._running:
+                    event = pygame.event.wait(self._timeout_ms)
+                    if event.type != pygame.NOEVENT:
+                        self._LOGGER.debug(f"Processing event: {event}")
+                        # raise NotImplementedError("Notify subscribers of event")
+                    else:
+                        pass
+                    await asyncio.sleep(0)  # Yield to other tasks
+            finally:
+                self._running = False
+
+        self._loop.run_until_complete(_process_events())
+
+    def call(self, callback: Any, *args: Any, **
+             kwargs: Any) -> concurrent.futures.Future:
+        """Arrange for a callback to be called in the main thread.
+
+        There isn't an actual magic in the wrap_future() function:
+        - https://stackoverflow.com/a/49351069
+
+        :param callback: The callback to be called, either a function or a coroutine.
+        :param args: The arguments to pass to the callback.
+        :param kwargs: The keyword arguments to pass to the callback.
+        """
+
+        if self._loop is None:
+            raise RuntimeError("EventManager must be entered to arrange callbacks.")
+
+        if asyncio.get_running_loop() is None:
+            raise RuntimeError(
+                "EventManager.arrange_callback() must be called from an asyncio coroutine.")
+
+        @functools.wraps(callback)
+        async def _callback_wrapper(callback, *args, **kwargs):
+            if asyncio.iscoroutinefunction(callback):
+                return await callback(*args, **kwargs)
+            return callback(*args, **kwargs)
+
+        return asyncio.wrap_future(asyncio.run_coroutine_threadsafe(
+            _callback_wrapper(callback, *args, **kwargs), self._loop))
 
     def shutdown(self) -> None:
-
-        self.running = False
+        if self._loop is not None:
+            self._running = False
+        else:
+            self._LOGGER.warning("shutdown() called while not entered.")
 
     def get_subscription(self) -> EventSubscription:
-
         return EventSubscription(self)
 
     def post(self, event: pygame.event.Event) -> None:
