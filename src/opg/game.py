@@ -4,6 +4,7 @@ import logging
 
 from . import assets, util
 from .event_manager import EventManager
+from .user_event import TimerUpdateEvent
 
 
 class MainMenu:
@@ -24,6 +25,9 @@ class MainMenu:
         self._screen = None
         self._running = False
 
+        self._background_image = pygame.image.load(
+            assets.get_asset_path('orb.pond.png'))
+
         def compute_min_size():
             d_size = pygame.display.get_desktop_sizes()[self._DEFAULT_DISPLAY]
             target_size_ratio = (5, 4)
@@ -33,13 +37,8 @@ class MainMenu:
         self._MIN_SIZE = compute_min_size()
 
     async def draw(self):
-        background_image = pygame.image.load(assets.get_asset_path('orb.pond.png'))
         background_image = pygame.transform.scale(
-            background_image, self._screen.get_size())
-        self._LOGGER.info(
-            'Drawing background image of size %s',
-            background_image.get_size())
-        self._LOGGER.info('Screen size is %s', self._screen.get_size())
+            self._background_image, self._screen.get_size())
         self._screen.blit(background_image, (0, 0))
         pygame.display.flip()
 
@@ -69,6 +68,13 @@ class MainMenu:
                 event = await sub.get()
                 self._LOGGER.info('Mouse button clicked')
 
+    async def watch_for_redraw(self, tg):
+        _sub = self._event_manager.get_subscription(TimerUpdateEvent.type)
+        async with _sub as sub:
+            while True:
+                await sub.get()
+                await self.draw()
+
     async def run(self):
         assert self._loop is asyncio.get_running_loop()
 
@@ -87,9 +93,14 @@ class MainMenu:
 
         try:
             await self.draw()
+            print(TimerUpdateEvent.type)
+            print(TimerUpdateEvent())
+            print(dir(TimerUpdateEvent()))
+            pygame.time.set_timer(TimerUpdateEvent.type, 1000 // 60)
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self.watch_for_quit(tg))
                 tg.create_task(self.watch_for_resize(tg))
                 tg.create_task(self.watch_for_button(tg))
+                # tg.create_task(self.watch_for_redraw(tg))
         except* util.TerminateTaskGroup as e:
             pass

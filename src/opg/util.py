@@ -55,7 +55,7 @@ capture_stderr = functools.partial(capture_file_descriptor, sys.stderr.fileno())
 
 
 def freeze_class_fields(*fields: str) -> type:
-    """A decorator that freezes the given class fields of a class.
+    """A decorator that freezes the given member fields of a class.
     """
 
     class FrozenFieldClass(type):

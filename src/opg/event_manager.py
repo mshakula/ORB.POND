@@ -236,9 +236,3 @@ class EventManager:
 
     def get_subscription(self, *events) -> EventSubscription:
         return EventSubscription(self).subscribe(*events)
-
-    def post(self, event: pygame.event.Event) -> None:
-        """Post an event to the pygame event queue.
-        """
-
-        raise NotImplementedError()
