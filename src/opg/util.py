@@ -3,8 +3,7 @@
 
 import os
 import sys
-import stat
-import importlib
+import asyncio
 import contextlib
 import tempfile
 import functools
@@ -79,3 +78,25 @@ def freeze_class_fields(*fields: str) -> type:
         return Frozen
 
     return decorator
+
+
+class TerminateTaskGroup(Exception):
+    """A custom exception to terminate a task group.
+
+    From the docs
+    https://docs.python.org/3/library/asyncio-task.html#asyncio.TaskGroup :
+    '''
+    The first time any of the tasks belonging to the group fails with an exception
+    other than asyncio.CancelledError, the remaining tasks in the group are cancelled.
+    '''
+    """
+    pass
+
+
+def terminate_task_group(tg: asyncio.TaskGroup) -> None:
+    """Terminate a task group.
+    """
+
+    async def cancel():
+        raise TerminateTaskGroup()
+    tg.create_task(cancel())

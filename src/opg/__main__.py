@@ -16,44 +16,25 @@ from .util import capture_stdout
 
 async def _main(event_manager: "EventManager") -> None:
     """
-    Asynchronous entry point for ORB.POND.GAME.
+    Asynchronous entry point for the ORB.POND. game.
     """
 
     # This is the top-level function, so set the default event loop for this thread
     # to be the running loop.
     asyncio.set_event_loop(asyncio.get_running_loop())
 
-    import pygame
-
-    logging.getLogger().info("Starting ORB.POND.GAME")
-
-    # Set up the display
-    async def create_display() -> pygame.Surface:
-        disp = pygame.display.set_mode(
-            size=(800, 600),
-            flags=pygame.SCALED | pygame.SRCALPHA | pygame.DOUBLEBUF | pygame.RESIZABLE,
-            depth=0,
-            display=0,
-            vsync=1)
-        pygame.display.set_caption('ORB.POND.GAME')
-        logging.getLogger().debug("DISPLAY CREATED")
-        return disp
-
+    from .game import MainMenu
     try:
-        logging.getLogger().debug("ARRANGING DISPLAY")
-        display = await event_manager.call(create_display)
-
-        async with event_manager.get_subscription().subscribe(pygame.QUIT) as sub:
-            await sub.get()
-            logging.getLogger().info("QUIT event received")
-
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(MainMenu(event_manager).run())
     except asyncio.CancelledError:
-        logging.getLogger().info("Cancelled")
+        pass
     except BaseException as e:
         logging.getLogger().critical("Unhandled exception", exc_info=e)
     finally:
-        logging.getLogger().info("Shutting down ORB.POND.GAME")
+        logging.getLogger().info("Shutting down event manager")
         event_manager.shutdown()
+        logging.getLogger().info("Exiting game_thread")
 
 
 def main() -> None:
@@ -72,7 +53,6 @@ def main() -> None:
 
         with capture_stdout() as f:
             import pygame
-
             f.seek(0)
             for line in f.read().decode().strip().split("\n"):
                 logging.getLogger().info(line)
@@ -95,12 +75,13 @@ def main() -> None:
             try:
                 game_thread.start()
                 em.process_events()
+                assert not em._running
             except KeyboardInterrupt:
                 logging.getLogger().warning("Keyboard interrupt!")
             finally:
                 # Canceling the task has to be done from its own event loop
+                logging.getLogger().info(f"Waiting for {game_thread.name} to finish")
                 game_loop.call_soon_threadsafe(game_task.cancel)
-                logging.getLogger().info(f"Waiting for {game_thread.name} to finish.")
                 game_thread.join()
 
     except KeyboardInterrupt:
@@ -109,6 +90,7 @@ def main() -> None:
         logging.getLogger().critical("Unhandled exception", exc_info=e)
         sys.exit(1)
     finally:
+        logging.getLogger().info("Exit")
         sys.exit(0)
 
 

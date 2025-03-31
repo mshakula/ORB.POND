@@ -106,7 +106,7 @@ class EventManager:
     - https://stackoverflow.com/questions/28866651/python-concurrent-futures-using-subprocess-with-a-callback
     """
 
-    def __init__(self, timeout_ms: float = 10) -> None:
+    def __init__(self, timeout_ms: float = 100) -> None:
         """Create a new event manager. Does not enable it or start the event loop.
         """
 
@@ -136,6 +136,9 @@ class EventManager:
                 "EventManager.__enter__ must be allowed to call pygame.display.init()")
         else:
             pygame.display.init()
+            self._LOGGER.debug(
+                f"Initialized pygame display with {
+                    pygame.display.get_driver()} driver")
 
         self._loop = asyncio.new_event_loop()
 
@@ -184,10 +187,11 @@ class EventManager:
                 while self._running:
                     event = pygame.event.wait(self._timeout_ms)
                     if event.type != pygame.NOEVENT:
-                        self._LOGGER.debug(f"Processing event: {event}")
                         with self._subscriptions_lock:
                             for subscription, queue in self._subscriptions.items():
                                 if event.type in subscription:
+                                    self._LOGGER.debug(
+                                        f"Sending event: {event} to {subscription}")
                                     queue.sync_q.put(event)
                     else:
                         pass
@@ -230,8 +234,8 @@ class EventManager:
         else:
             self._LOGGER.warning("shutdown() called while not entered.")
 
-    def get_subscription(self) -> EventSubscription:
-        return EventSubscription(self)
+    def get_subscription(self, *events) -> EventSubscription:
+        return EventSubscription(self).subscribe(*events)
 
     def post(self, event: pygame.event.Event) -> None:
         """Post an event to the pygame event queue.
