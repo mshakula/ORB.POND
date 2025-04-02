@@ -19,6 +19,9 @@ from .util import suppress_stdout
 
 class EventSubscription:
     """A subscription to a set of specific event types.
+
+    - https://docs.python.org/3/faq/library.html#what-kinds-of-global-value-mutation-are-thread-safe : the set update()
+    methods are atomic from perspective of the GIL.
     """
 
     def __init__(self, event_manager: EventManager) -> None:
@@ -27,7 +30,7 @@ class EventSubscription:
         :param event_manager: The event manager to subscribe to.
         """
 
-        self._event_manager = event_manager
+        self._em = event_manager
         self._active = False
         self._event_list = set()
 
@@ -35,8 +38,8 @@ class EventSubscription:
         """Activate the subscription.
         """
 
-        with self._event_manager._subscriptions_lock:
-            self._event_manager._subscriptions[self] = janus.Queue()
+        with self._em._subscriptions_lock:
+            self._em._subscriptions[self] = janus.Queue()
             self._active = True
         return self
 
@@ -44,21 +47,21 @@ class EventSubscription:
         """Deactivate the subscription.
         """
 
-        with self._event_manager._subscriptions_lock:
-            x = self._event_manager._subscriptions[self]
-            del self._event_manager._subscriptions[self]
+        with self._em._subscriptions_lock:
+            x = self._em._subscriptions[self]
+            del self._em._subscriptions[self]
             self._active = False
         await x.aclose()
 
     def __iter__(self) -> Iterable[int]:
-        return iter(self._event_list)
+        return iter(self._event_list)  # Atomic
 
     def subscribe(self, *event_list) -> EventSubscription:
         """Subscribe to a specific event type.
         """
 
         if self._active:
-            with self._event_manager._subscriptions_lock:
+            with self._em._subscriptions_lock:
                 self._event_list.update(event_list)
         else:
             self._event_list.update(event_list)
@@ -69,7 +72,7 @@ class EventSubscription:
         """
 
         if self._active:
-            with self._event_manager._subscriptions_lock:
+            with self._em._subscriptions_lock:
                 self._event_list.difference_update(event_list)
         else:
             self._event_list.difference_update(event_list)
@@ -82,7 +85,7 @@ class EventSubscription:
         if not self._active:
             raise RuntimeError("Cannot get events from an inactive subscription.")
 
-        return await self._event_manager._subscriptions[self].async_q.get()
+        return await self._em._subscriptions[self].async_q.get()
 
 
 class EventManager:
@@ -118,6 +121,7 @@ class EventManager:
 
         self._LOGGER = logging.getLogger(
             f"{self.__class__.__qualname__}#{id(self)}")
+
         self._thread = threading.current_thread()
         self._loop = None
         self._running = False
@@ -215,24 +219,24 @@ class EventManager:
         if self._loop is None:
             raise RuntimeError("EventManager must be entered to arrange callbacks.")
 
-        if asyncio.get_running_loop() is None:
-            raise RuntimeError(
-                "EventManager.arrange_callback() must be called from an asyncio coroutine.")
-
         @functools.wraps(callback)
-        async def _callback_wrapper(callback, *args, **kwargs):
+        async def _callback_wrapper():
             if asyncio.iscoroutinefunction(callback):
                 return await callback(*args, **kwargs)
             return callback(*args, **kwargs)
 
         return asyncio.wrap_future(asyncio.run_coroutine_threadsafe(
-            _callback_wrapper(callback, *args, **kwargs), self._loop))
+            _callback_wrapper(), self._loop))
 
     def shutdown(self) -> None:
+        """Shutdown the event manager."""
+
         if self._loop is not None:
             self._running = False
         else:
             self._LOGGER.warning("shutdown() called while not entered.")
 
     def get_subscription(self, *events) -> EventSubscription:
+        """Get a subscription to a set of events."""
+
         return EventSubscription(self).subscribe(*events)
