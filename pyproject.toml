@@ -9,7 +9,10 @@ description = "Final project for PHYS3120 Spring 2025"
 authors = [{ name = "Matvey Shakula", email = "matvey@gatech.edu" }]
 requires-python = ">=3.10"
 readme = "README.md"
-dependencies = ["numpy", "pygame", "pytest", "janus", "moderngl"]
+dependencies = ["numpy", "pygame", "janus", "moderngl"]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "mypy", "flake8", "isort", "docformatter"]
 
 [project.scripts]
 orbpond = "opg.__main__:main"
