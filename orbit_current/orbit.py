@@ -3,7 +3,8 @@ import math
 import random
 import sys
 import os
-from asteroid import Asteroid  # Import the Asteroid class
+from game_buttons import Button
+from asteroid import Asteroid
 
 # --- Constants ---
 WIDTH, HEIGHT = 1280, 720  # Larger screen size
@@ -62,6 +63,14 @@ def rk4_step(state, dt, asteroids):
     ]
     return new_state
 
+def impulse_burn(state, dv):
+    x, y, vx, vy = state
+    speed = math.hypot(vx, vy)
+    unit_vx = vx / speed
+    unit_vy = vy / speed
+    vx += dv * unit_vx
+    vy += dv * unit_vy
+    return vx, vy
 
 # --- Pygame Initialization ---
 pygame.init()
@@ -104,6 +113,9 @@ try:
             os.path.join(os.path.dirname(__file__), "assets", "asteroid4.png")
         ).convert_alpha(),
     ]
+
+    button1 = Button(50, 100, 200, 50, "Posigrade Burn", (255, 255, 255), (100, 255, 100))
+    button2 = Button(50, 170, 200, 50, "Retrograde Burn", (255, 255, 255), (255, 100, 100))
 
     # Load camera flash sound
     camera_flash_sound = pygame.mixer.Sound(
@@ -182,6 +194,28 @@ while running:
     clock.tick(FPS)
 
     for event in pygame.event.get():
+        mouse_clicked_this_frame = False
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_click = pygame.mouse.get_pressed()[0]
+
+        button1.check_hover(mouse_pos)
+        button2.check_hover(mouse_pos)
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_clicked_this_frame = True
+
+        if mouse_clicked_this_frame:
+            if button1.is_clicked(mouse_pos, True) and satellite_launched and satellite_state:
+                print("Posigrade burn")
+                vx, vy = impulse_burn(satellite_state, 10)
+                satellite_state[2] = vx
+                satellite_state[3] = vy
+
+            if button2.is_clicked(mouse_pos, True) and satellite_launched and satellite_state:
+                print("Retrograde burn")
+                vx, vy = impulse_burn(satellite_state, -10)
+                satellite_state[2] = vx
+                satellite_state[3] = vy
         if event.type == pygame.QUIT:
             running = False
         # Allow restart if game has finished and a key is pressed.
@@ -222,6 +256,10 @@ while running:
     rotated_canon = pygame.transform.rotate(canon_img, angle_deg)
     canon_rect = rotated_canon.get_rect(center=CANON_POS)
     screen.blit(rotated_canon, canon_rect)
+
+    # draw buttons
+    button1.draw(screen)
+    button2.draw(screen)
 
     # Always draw the path, even after the game ends
     if len(satellite_path) > 1:
