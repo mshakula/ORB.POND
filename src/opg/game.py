@@ -1,121 +1,72 @@
-# The mechanics of the game itself, the title screen and routing from there
-
-import os
+# games launch from here
 import pygame
-
+import sys
+import os
 from . import assets
-from .about import open_about
-from .tools import TITLE, FONT_NAME, WHITE, GRAY, SCREEN_WIDTH, SCREEN_HEIGHT, Button
+from . import tools
+from . import launch
 
-# Initialize pygame
-pygame.init()
+def play_game(button):
+    if button=='Game 1':
+        launch.main()
 
-class Menu:
-    def __init__(self, screen):
-        self.screen = screen
-        self.running = True
-        self.screen_width, self.screen_height = self.screen.get_size()
+def game_menu():
+    pygame.init()
+    screen = pygame.display.set_mode((tools.SCREEN_WIDTH, tools.SCREEN_HEIGHT), pygame.RESIZABLE)
+    pygame.display.set_caption(tools.TITLE)
+    clock = pygame.time.Clock()
 
-        # Initialize buttons
-        self.buttons = [
-            Button(SCREEN_WIDTH // 2 - 100, 300, 200, 50, "Start Game", WHITE, GRAY),
-            Button(SCREEN_WIDTH // 2 - 100, 370, 200, 50, "About the game!", WHITE, GRAY),
-            Button(SCREEN_WIDTH // 2 - 100, 440, 200, 50, "Quit", WHITE, GRAY)
-        ]
+    # Text for the "About" box
+    body_lines = [
+        "Choose a game below to get started. [include explanations?]",
+    ]
 
-        # Load and scale background image
-        self.original_bg = self.load_background()
-        self.bg_image = pygame.transform.scale(
-            self.original_bg, (self.screen_width, self.screen_height))
+    game_buttons = [
+        tools.Button(100, 400, 200, 60, "Game 1", color=tools.BLUE, hover_color=tools.GRAY),
+        tools.Button(320, 400, 200, 60, "Game 2", color=tools.BLUE, hover_color=tools.GRAY),
+        tools.Button(540, 400, 200, 60, "Game 3", color=tools.BLUE, hover_color=tools.GRAY),
+        tools.Button(320, 480, 200, 60, "Game 4", color=tools.BLUE, hover_color=tools.GRAY),
+    ]
 
-        # Update initial button sizes based on actual screen dimensions
-        self.update_ui_elements()
+    ui_elements = tools.update_ui_elements(screen, body_lines, game_buttons, assets, tools)
 
-        # Title font
-        self.title_font_size = 72
-        self.title_font = pygame.font.SysFont(FONT_NAME, self.title_font_size)
-        self.title_text = self.title_font.render(TITLE, True, WHITE)
-        self.title_position = (
-            self.screen_width //
-            2 -
-            self.title_text.get_width() //
-            2,
-            100)
+    running = True
+    while running:
+        screen.blit(ui_elements["bg_image"], (0, 0))
+        screen.blit(ui_elements["header_text"], (tools.SCREEN_WIDTH // 2 - ui_elements["header_text"].get_width() // 2, 60))
 
-    def load_background(self):
-        image = pygame.image.load(assets.get_asset_path('ORB.POND.png'))
-        return image  # Store original image for rescaling
+        # Draw text box
+        pygame.draw.rect(screen, tools.WHITE, ui_elements["text_box_rect"], border_radius=10)
+        pygame.draw.rect(screen, tools.BLACK, ui_elements["text_box_rect"], 2, border_radius=10)
 
-    def update_ui_elements(self):
-        """Update UI elements based on current screen size"""
-        self.screen_width, self.screen_height = self.screen.get_size()
+        # Draw text lines
+        for text_surf, text_rect in ui_elements["text_positions"]:
+            screen.blit(text_surf, text_rect)
 
-        # Update button sizes and positions
-        for button in self.buttons:
-            button.update_size(self.screen_width, self.screen_height)
+        # Input
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_click = False
 
-        # Update title font size and position
-        self.title_font_size = max(36, int(72 * (self.screen_height / SCREEN_HEIGHT)))
-        self.title_font = pygame.font.SysFont(FONT_NAME, self.title_font_size)
-        self.title_text = self.title_font.render(TITLE, True, WHITE)
-        self.title_position = (self.screen_width //
-                               2 -
-                               self.title_text.get_width() //
-                               2, int(100 *
-                                      (self.screen_height /
-                                       SCREEN_HEIGHT)))
-
-        # Rescale background
-        self.bg_image = pygame.transform.scale(
-            self.original_bg, (self.screen_width, self.screen_height))
-
-    def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.running = False
-
+                running = False
             elif event.type == pygame.VIDEORESIZE:
-                # Handle window resize event
-                self.screen = pygame.display.set_mode(
-                    (event.w, event.h),
-                    pygame.RESIZABLE
-                )
-                self.update_ui_elements()
-
+                screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                ui_elements = tools.update_ui_elements(screen, body_lines, game_buttons, assets, tools)
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if self.buttons[0].is_clicked(pygame.mouse.get_pos(), True):
-                    print("Starting game...")
-                    # Here you would transition to the actual game
-                    # self.start_game()
-                elif self.buttons[1].is_clicked(pygame.mouse.get_pos(), True):
-                    print("Opening about screen...")
-                    open_about(self.screen, self._exit_game)
-                elif self.buttons[2].is_clicked(pygame.mouse.get_pos(), True):
-                    self.running = False
+                if event.button == 1:
+                    mouse_click = True
 
-    def update(self):
-        mouse_pos = pygame.mouse.get_pos()
-        for button in self.buttons:
+        for button in game_buttons:
             button.check_hover(mouse_pos)
-
-    def render(self):
-        # Draw background
-        self.screen.blit(self.bg_image, (0, 0))
-
-        # Draw title
-        self.screen.blit(self.title_text, self.title_position)
-
-        # Draw buttons
-        for button in self.buttons:
-            button.draw(self.screen)
+            button.draw(screen)
+            if button.is_clicked(mouse_pos, mouse_click):
+                print(f"Launching {button.text}...")
+                play_game(button.text)
 
         pygame.display.flip()
+        clock.tick(60)
 
-    def run(self):
-        while self.running:
-            self.handle_events()
-            self.update()
-            self.render()
+    pygame.quit()
+    sys.exit()
 
-    def _exit_game(self):
-        self.running = False

@@ -46,7 +46,7 @@ async def _main() -> None:
     pygame.display.set_caption('ORB.POND.GAME')
 
     # Start the game
-    game_module = importlib.import_module('.game', __package__)
+    game_module = importlib.import_module('.menu', __package__)
     main_menu = getattr(game_module, 'Menu')
     main_menu(screen).run()
 

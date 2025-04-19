@@ -90,3 +90,40 @@ class Button:
         avg_color = pixels.mean(axis=(0, 1)).astype(int)
         return tuple(avg_color)
 
+# to resize buttons, background, etc in window
+def update_ui_elements(screen, body_lines, buttons, assets, tools):
+    screen_width, screen_height = screen.get_size()
+
+    # font
+    about_font = pygame.font.SysFont(tools.FONT_NAME, 24)
+    header_font = pygame.font.SysFont(tools.FONT_NAME, 36)
+    header_text = header_font.render("About ORB.POND.GAME", True, tools.PURPLE)
+
+    # background and text
+    image = pygame.image.load(assets.get_asset_path('space.png'))
+    bg_image = pygame.transform.scale(image, (screen_width, screen_height))
+    padding = 20
+    line_spacing = 10
+    text_width = max(about_font.size(line)[0] for line in body_lines)
+    text_height = len(body_lines) * (about_font.get_linesize() + line_spacing)
+    box_width = text_width + padding * 2
+    box_height = text_height + padding * 2
+    box_x = (screen_width - box_width) // 2
+    box_y = 130
+    text_box_rect = pygame.Rect(box_x, box_y, box_width, box_height)
+    text_positions = []
+    for i, line in enumerate(body_lines):
+        text_surf = about_font.render(line, True, tools.PURPLE)
+        text_rect = text_surf.get_rect()
+        text_rect.midtop = (screen_width // 2, box_y + padding + i * (about_font.get_linesize() + line_spacing))
+        text_positions.append((text_surf, text_rect))
+
+    for button in buttons:
+        button.update_size(screen_width, screen_height)
+
+    return {
+        "bg_image": bg_image,
+        "header_text": header_text,
+        "text_box_rect": text_box_rect,
+        "text_positions": text_positions
+    }
