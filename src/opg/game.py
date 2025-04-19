@@ -1,66 +1,14 @@
+# The mechanics of the game itself, the title screen and routing from there
+
 import os
 import pygame
 
 from . import assets
+from .about import open_about
+from .tools import TITLE, FONT_NAME, WHITE, GRAY, SCREEN_WIDTH, SCREEN_HEIGHT, Button
 
 # Initialize pygame
 pygame.init()
-
-# Constants
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-TITLE = "ORB.POND.GAME"
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (100, 100, 100)
-BLUE = (0, 0, 255)
-FONT_NAME = "Berlin"
-
-
-class Button:
-    def __init__(self, x, y, width, height, text, color, hover_color):
-        # Store position as ratio of screen size for easy scaling
-        self.x_ratio = x / SCREEN_WIDTH
-        self.y_ratio = y / SCREEN_HEIGHT
-        self.width_ratio = width / SCREEN_WIDTH
-        self.height_ratio = height / SCREEN_HEIGHT
-
-        self.rect = pygame.Rect(x, y, width, height)
-        self.text = text
-        self.color = color
-        self.hover_color = hover_color
-        self.is_hovered = False
-        self.font = pygame.font.SysFont(FONT_NAME, 32)
-        self.font_size = 32
-
-    def update_size(self, screen_width, screen_height):
-        """Update button size and position based on screen dimensions"""
-        x = int(self.x_ratio * screen_width)
-        y = int(self.y_ratio * screen_height)
-        width = int(self.width_ratio * screen_width)
-        height = int(self.height_ratio * screen_height)
-        self.rect = pygame.Rect(x, y, width, height)
-
-        # Scale font size based on screen height
-        self.font_size = max(16, int(32 * (screen_height / SCREEN_HEIGHT)))
-        self.font = pygame.font.SysFont(FONT_NAME, self.font_size)
-
-    def draw(self, surface):
-        color = self.hover_color if self.is_hovered else self.color
-        pygame.draw.rect(surface, color, self.rect, border_radius=5)
-        pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=5)
-
-        text_surf = self.font.render(self.text, True, BLACK)
-        text_rect = text_surf.get_rect(center=self.rect.center)
-        surface.blit(text_surf, text_rect)
-
-    def check_hover(self, mouse_pos):
-        self.is_hovered = self.rect.collidepoint(mouse_pos)
-        return self.is_hovered
-
-    def is_clicked(self, mouse_pos, mouse_click):
-        return self.rect.collidepoint(mouse_pos) and mouse_click
-
 
 class Menu:
     def __init__(self, screen):
@@ -71,7 +19,7 @@ class Menu:
         # Initialize buttons
         self.buttons = [
             Button(SCREEN_WIDTH // 2 - 100, 300, 200, 50, "Start Game", WHITE, GRAY),
-            Button(SCREEN_WIDTH // 2 - 100, 370, 200, 50, "Settings", WHITE, GRAY),
+            Button(SCREEN_WIDTH // 2 - 100, 370, 200, 50, "About the game!", WHITE, GRAY),
             Button(SCREEN_WIDTH // 2 - 100, 440, 200, 50, "Quit", WHITE, GRAY)
         ]
 
@@ -140,8 +88,8 @@ class Menu:
                     # Here you would transition to the actual game
                     # self.start_game()
                 elif self.buttons[1].is_clicked(pygame.mouse.get_pos(), True):
-                    print("Opening settings...")
-                    # self.open_settings()
+                    print("Opening about screen...")
+                    open_about(self.screen, self._exit_game)
                 elif self.buttons[2].is_clicked(pygame.mouse.get_pos(), True):
                     self.running = False
 
@@ -168,3 +116,6 @@ class Menu:
             self.handle_events()
             self.update()
             self.render()
+
+    def _exit_game(self):
+        self.running = False
