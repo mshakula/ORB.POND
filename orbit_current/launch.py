@@ -46,8 +46,8 @@ launch_pos = planet_pos + pygame.Vector2(0, -(planet_radius + 10))
 # Physics constants
 GM = 500000
 # Time step
-dt = 0.05
-REVOLUTIONS_TO_WIN = 150
+dt = 0.1
+REVOLUTIONS_TO_WIN = 20
 
 
 # Helper functions
@@ -182,8 +182,8 @@ def main():
     launch_vector = pygame.Vector2(0, 0)
     speed_factor = 0.5
 
-    button1 = Button(50, 50, 200, 50, "Impulse 1", WHITE, (100, 255, 100))
-    button2 = Button(50, 120, 200, 50, "Impulse 2", WHITE, (255, 100, 100))
+    # button1 = Button(50, 50, 200, 50, "Impulse 1", WHITE, (100, 255, 100))
+    # button2 = Button(50, 120, 200, 50, "Impulse 2", WHITE, (255, 100, 100))
 
     while True:
         mouse_pos = pygame.mouse.get_pos()
@@ -284,25 +284,25 @@ def main():
                 game_over = True
                 win = False
 
-            # Draw buttons
-            button1.draw(screen)
-            button2.draw(screen)
+            # # Draw buttons
+            # button1.draw(screen)
+            # button2.draw(screen)
             
-            # Button interactions
-            button1.check_hover(mouse_pos)
-            button2.check_hover(mouse_pos)
+            # # Button interactions
+            # button1.check_hover(mouse_pos)
+            # button2.check_hover(mouse_pos)
             
-            if button1.is_clicked(mouse_pos, mouse_click):
-                print("Impulse burn 1 applied")
-                impulse_burn(rkrocket, 5)
-                impulse_burn(vrocket, 5)
-                button1.disabled = True
+            # if button1.is_clicked(mouse_pos, mouse_click):
+            #     print("Impulse burn 1 applied")
+            #     impulse_burn(rkrocket, 5)
+            #     impulse_burn(vrocket, 5)
+            #     button1.disabled = True
 
-            if button2.is_clicked(mouse_pos, mouse_click):
-                print("Impulse burn 2 applied")
-                impulse_burn(rkrocket, 5)
-                impulse_burn(vrocket, 5)
-                button2.disabled = True
+            # if button2.is_clicked(mouse_pos, mouse_click):
+            #     print("Impulse burn 2 applied")
+            #     impulse_burn(rkrocket, 5)
+            #     impulse_burn(vrocket, 5)
+            #     button2.disabled = True
 
             # Draw legend
             legend_surface = pygame.Surface((220, 100), pygame.SRCALPHA)

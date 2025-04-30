@@ -27,6 +27,9 @@ PICTURE_MARGIN = 100
 # Georgia Tech Gold color (RGB)
 GEORGIA_TECH_GOLD = (179, 163, 105)
 
+# Fuel
+fuel_level = 100  # percent
+
 # --- Helper Functions for RK4 ---
 def acceleration(state, asteroids):
     x, y, _, _ = state
@@ -63,13 +66,18 @@ def rk4_step(state, dt, asteroids):
     ]
     return new_state
 
+
 def impulse_burn(state, dv):
+    global fuel_level
     x, y, vx, vy = state
+    if fuel_level <= 0:
+        return vx, vy
     speed = math.hypot(vx, vy)
     unit_vx = vx / speed
     unit_vy = vy / speed
     vx += dv * unit_vx
     vy += dv * unit_vy
+    fuel_level = max(fuel_level - 10, 0)
     return vx, vy
 
 # --- Pygame Initialization ---
@@ -98,7 +106,6 @@ try:
     ).convert_alpha()
     satellite_img = pygame.transform.scale(satellite_img, (40, 40))
 
-    # Load all four asteroid images
     asteroid_imgs_full = [
         pygame.image.load(
             os.path.join(os.path.dirname(__file__), "assets", "asteroid1.png")
@@ -117,7 +124,6 @@ try:
     button1 = Button(50, 100, 200, 50, "Posigrade Burn", (255, 255, 255), (100, 255, 100))
     button2 = Button(50, 170, 200, 50, "Retrograde Burn", (255, 255, 255), (255, 100, 100))
 
-    # Load camera flash sound
     camera_flash_sound = pygame.mixer.Sound(
         os.path.join(os.path.dirname(__file__), "assets", "camera.wav")
     )
@@ -126,7 +132,6 @@ except Exception as e:
     sys.exit()
 
 
-# --- Helper for Non-Overlapping Asteroids ---
 def get_random_position_for_asteroid(size, existing_asteroids):
     max_attempts = 1000
     for _ in range(max_attempts):
@@ -134,9 +139,8 @@ def get_random_position_for_asteroid(size, existing_asteroids):
         y = random.randint(EDGE_MARGIN + size // 2, HEIGHT - EDGE_MARGIN - size // 2)
         overlap = False
         for a in existing_asteroids:
-            ax, ay = a.pos  # Use the Asteroid object's pos attribute
+            ax, ay = a.pos
             asize = a.size
-            # Increase required separation by adding the satellite's width so it can fit between
             required_separation = (((size + asize) // 2) + ASTEROID_BUFFER + satellite_img.get_width())
             if math.hypot(x - ax, y - ay) < required_separation:
                 overlap = True
@@ -146,39 +150,28 @@ def get_random_position_for_asteroid(size, existing_asteroids):
     return (x, y)
 
 
-# --- Function to Initialize Asteroids ---
 def init_asteroids():
     asteroids = []
-    # Randomly select 2 asteroid images from the full list
     asteroid_imgs = random.sample(asteroid_imgs_full, 2)
     for img in asteroid_imgs:
         size = random.randint(80, 150)
         pos = get_random_position_for_asteroid(size, asteroids)
-        # Create an Asteroid instance instead of a dictionary.
         asteroid = Asteroid(img, pos, size)
         asteroids.append(asteroid)
     return asteroids
 
-
-# --- Game Variables ---
 asteroids = init_asteroids()
 satellite_launched = False
-satellite_state = None  # [x, y, vx, vy]
+satellite_state = None
 picture_count = 0
-
-# To store the satellite's path (list of (x,y) tuples)
 satellite_path = []
-
-# Game state flags
-game_finished = False  # Set when the satellite exits the screen or a collision occurs.
+game_finished = False
 final_message = ""
-
-# Font for messages
 font = pygame.font.SysFont("Arial", 24)
 
 
 def reset_game():
-    global satellite_launched, satellite_state, asteroids, picture_count, game_finished, final_message, satellite_path
+    global satellite_launched, satellite_state, asteroids, picture_count, game_finished, final_message, satellite_path, fuel_level
     satellite_launched = False
     satellite_state = None
     picture_count = 0
@@ -186,9 +179,8 @@ def reset_game():
     game_finished = False
     final_message = ""
     satellite_path = []
+    fuel_level = 100
 
-
-# --- Main Loop ---
 running = True
 while running:
     clock.tick(FPS)
@@ -201,46 +193,46 @@ while running:
         button1.check_hover(mouse_pos)
         button2.check_hover(mouse_pos)
 
+        if fuel_level <= 0:
+            button1.disabled = True
+            button2.disabled = True
+        else:
+            button1.disabled = False
+            button2.disabled = False
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_clicked_this_frame = True
 
         if mouse_clicked_this_frame:
-            if button1.is_clicked(mouse_pos, True) and satellite_launched and satellite_state:
-                print("Posigrade burn")
-                vx, vy = impulse_burn(satellite_state, 10)
+            if button1.is_clicked(mouse_pos, True) and satellite_launched and satellite_state and fuel_level > 0:
+                vx, vy = impulse_burn(satellite_state, 15)
                 satellite_state[2] = vx
                 satellite_state[3] = vy
 
-            if button2.is_clicked(mouse_pos, True) and satellite_launched and satellite_state:
-                print("Retrograde burn")
-                vx, vy = impulse_burn(satellite_state, -10)
+            if button2.is_clicked(mouse_pos, True) and satellite_launched and satellite_state and fuel_level > 0:
+                vx, vy = impulse_burn(satellite_state, -15)
                 satellite_state[2] = vx
                 satellite_state[3] = vy
         if event.type == pygame.QUIT:
             running = False
-        # Allow restart if game has finished and a key is pressed.
         if game_finished and event.type == pygame.KEYDOWN:
             reset_game()
-        # Launch satellite only if game is not finished and not already launched.
         if not game_finished and event.type == pygame.MOUSEBUTTONDOWN and not satellite_launched:
             mouse_x, mouse_y = pygame.mouse.get_pos()
             dx = mouse_x - CANON_POS[0]
             dy = mouse_y - CANON_POS[1]
             angle = math.atan2(dy, dx)
-            speed = 150  # Adjust as needed
+            speed = 150
             vx = speed * math.cos(angle)
             vy = speed * math.sin(angle)
             satellite_state = [CANON_POS[0], CANON_POS[1], vx, vy]
             satellite_launched = True
 
-    # Draw background
     screen.blit(background_img, (0, 0))
 
-    # Draw asteroids using the Asteroid class's draw method
     for asteroid in asteroids:
         asteroid.draw(screen)
 
-    # Draw canon platform
     platform_width = 120
     platform_height = 10
     platform_x = CANON_POS[0] - platform_width // 2
@@ -248,7 +240,6 @@ while running:
     platform_rect = (platform_x, platform_y, platform_width, platform_height)
     pygame.draw.rect(screen, (100, 100, 100), platform_rect)
 
-    # Draw canon (rotated to point to mouse)
     mouse_x, mouse_y = pygame.mouse.get_pos()
     dx = mouse_x - CANON_POS[0]
     dy = mouse_y - CANON_POS[1]
@@ -257,15 +248,15 @@ while running:
     canon_rect = rotated_canon.get_rect(center=CANON_POS)
     screen.blit(rotated_canon, canon_rect)
 
-    # draw buttons
     button1.draw(screen)
     button2.draw(screen)
 
-    # Always draw the path, even after the game ends
+    fuel_text = font.render(f"Fuel: {fuel_level}%", True, (255, 255, 255))
+    screen.blit(fuel_text, (EDGE_MARGIN - 15 , EDGE_MARGIN + 140))
+
     if len(satellite_path) > 1:
         pygame.draw.lines(screen, GEORGIA_TECH_GOLD, False, satellite_path, 4)
 
-    # Display picture counter and satellite info on screen
     if satellite_state:
         x, y, vx, vy = satellite_state
         info_text = font.render(
@@ -275,16 +266,13 @@ while running:
         )
         screen.blit(info_text, (EDGE_MARGIN, EDGE_MARGIN // 2))
 
-    # Update simulation if the game is not finished
     if not game_finished and satellite_launched and satellite_state:
         satellite_state = rk4_step(satellite_state, DT, asteroids)
         x, y, vx, vy = satellite_state
 
-        # Start tracking the path after the satellite has moved 50 pixels from launch
         if math.hypot(x - CANON_POS[0], y - CANON_POS[1]) > 50:
             satellite_path.append((x, y))
 
-        # Collision detection and picture-taking
         satellite_radius = satellite_img.get_width() // 2
         for asteroid in asteroids:
             ax, ay = asteroid.pos
@@ -301,29 +289,25 @@ while running:
                 picture_count += 1
                 camera_flash_sound.play()
 
-        # Check if satellite goes off-screen.
         if x < 0 or x > WIDTH or y < 0 or y > HEIGHT:
             if not game_finished:
                 if picture_count == len(asteroids):
-                    final_message = "You win! All pictures taken."
+                    final_message = "You win! All pictures taken."  
                 else:
                     final_message = f"Game Over! Pictures taken: {picture_count}/{len(asteroids)}"
             game_finished = True
 
-        # Draw the satellite if still on screen and game is not finished
         if not game_finished:
             screen.blit(
                 satellite_img,
                 (x - satellite_img.get_width() // 2, y - satellite_img.get_height() // 2),
             )
 
-    # Display picture counter on screen
     counter_text = font.render(
         f"Pictures: {picture_count}/{len(asteroids)}", True, (255, 255, 255)
     )
     screen.blit(counter_text, (EDGE_MARGIN, EDGE_MARGIN // 2))
 
-    # If the game is finished, display the final message.
     if game_finished:
         msg = font.render(final_message, True, (255, 255, 0))
         screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, HEIGHT // 2))
