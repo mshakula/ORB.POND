@@ -3,11 +3,16 @@ import pygame
 import sys
 import os
 import matplotlib.pyplot as plt
+from game_buttons import Button
 
 # Initialize Pygame
 pygame.init()
 # Remove interactive mode so that plots remain open later
-plt.ioff()
+# plt.ioff()
+# Enable interactive mode for Matplotlib
+plt.ion()
+pygame.font.init()
+font = pygame.font.SysFont('Arial', 30)
 
 # Screen parameters
 WIDTH, HEIGHT = 1400, 700
@@ -43,8 +48,8 @@ launch_pos = planet_pos + pygame.Vector2(0, -(planet_radius + 10))
 # Physics constants
 GM = 500000
 # Time step
-dt = 0.5
-REVOLUTIONS_TO_WIN = 150
+dt = 0.1
+REVOLUTIONS_TO_WIN = 20
 
 
 # Helper functions
@@ -70,6 +75,17 @@ def rk4_update(pos, vel, dt):
     new_pos = pos + dt * (k1p + 2 * k2p + 2 * k3p + k4p) / 6
     return new_pos, new_vel
 
+def impulse_burn(rocket, dv):
+    if hasattr(rocket, "vel"):
+        # RK4: directly adjust velocity vector
+        direction = rocket.vel.normalize()
+        rocket.vel += direction * dv
+    else:
+        # Verlet: estimate velocity and update prev_pos accordingly
+        v = (rocket.pos - rocket.prev_pos) / dt
+        direction = v.normalize()
+        new_v = v + direction * dv
+        rocket.prev_pos = rocket.pos - new_v * dt
 
 # Rocket classes
 class RKRocket:
@@ -207,14 +223,22 @@ def main():
     launch_vector = pygame.Vector2(0, 0)
     speed_factor = 0.5
 
-    running = True
-    while running:
+    # button1 = Button(50, 50, 200, 50, "Impulse 1", WHITE, (100, 255, 100))
+    # button2 = Button(50, 120, 200, 50, "Impulse 2", WHITE, (255, 100, 100))
+
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_click = False
+        
+        # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False  # Quit gracefully; plotting code will follow.
+                pygame.quit()
+                sys.exit()
+            
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
-                    # Restart everything
+                    # Reset game state
                     launch_mode = True
                     launched = False
                     game_over = False
@@ -222,6 +246,11 @@ def main():
                     rkrocket = None
                     vrocket = None
                     plt.close("all")
+            
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left mouse button
+                    mouse_click = True
+            
             if launch_mode:
                 if event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.Vector2(event.pos)
@@ -233,10 +262,12 @@ def main():
                     launch_mode = False
                     launched = True
 
+        # Clear screen
         screen.blit(background_img, (0, 0))
         screen.blit(planet_img, planet_img.get_rect(center=planet_pos))
 
         if launch_mode:
+            # Draw launch interface
             rocket_rect = rocket_img.get_rect(center=launch_pos)
             screen.blit(rocket_img, rocket_rect)
             pygame.draw.line(screen, WHITE, launch_pos, mouse_pos, 2)
@@ -288,11 +319,32 @@ def main():
                     elif rocket.revolutions() >= REVOLUTIONS_TO_WIN:
                         game_over = True
                         win = True
+            
             if rkrocket.status != "In-Orbit" and vrocket.status != "In-Orbit":
                 game_over = True
                 win = False
 
-            # Legend
+            # # Draw buttons
+            # button1.draw(screen)
+            # button2.draw(screen)
+            
+            # # Button interactions
+            # button1.check_hover(mouse_pos)
+            # button2.check_hover(mouse_pos)
+            
+            # if button1.is_clicked(mouse_pos, mouse_click):
+            #     print("Impulse burn 1 applied")
+            #     impulse_burn(rkrocket, 5)
+            #     impulse_burn(vrocket, 5)
+            #     button1.disabled = True
+
+            # if button2.is_clicked(mouse_pos, mouse_click):
+            #     print("Impulse burn 2 applied")
+            #     impulse_burn(rkrocket, 5)
+            #     impulse_burn(vrocket, 5)
+            #     button2.disabled = True
+
+            # Draw legend
             legend_surface = pygame.Surface((220, 100), pygame.SRCALPHA)
             legend_surface.fill(LEGEND_BG)
             pygame.draw.line(legend_surface, RED, (10, 20), (40, 20), 3)
@@ -301,7 +353,7 @@ def main():
             legend_surface.blit(small_font.render("Verlet", True, WHITE), (50, 37))
             screen.blit(legend_surface, (WIDTH - 240, 20))
 
-            # Text info
+            # Draw status text
             status_texts = [
                 f"RK4: {int(rkrocket.revolutions())}/{REVOLUTIONS_TO_WIN} revs | {rkrocket.status}",
                 f"Verlet: {int(vrocket.revolutions())}/{REVOLUTIONS_TO_WIN} revs | {vrocket.status}",
@@ -310,6 +362,8 @@ def main():
                 screen.blit(
                     small_font.render(text, True, WHITE), (10, HEIGHT - 80 + i * 20)
                 )
+            
+            # Draw info text
             info_texts = [
                 f"RK4 Pos: ({rkrocket.pos.x:.1f}, {rkrocket.pos.y:.1f}) Vel: {rkrocket.speed:.2f} Acc: {rkrocket.acc.length():.4f}",
                 f"Verlet Pos: ({vrocket.pos.x:.1f}, {vrocket.pos.y:.1f}) Vel: {vrocket.speed:.2f} Acc: {vrocket.acc.length():.4f}",
@@ -319,10 +373,10 @@ def main():
                     small_font.render(text, True, WHITE), (10, HEIGHT - 40 + i * 20)
                 )
 
-        # If game is over, show message on screen but remain in loop until the player quits or restarts.
-        if game_over:
+        elif game_over:
+            # Game over screen
             msg = (
-                "You Win! 150 revolutions sustained!"
+                f'You Win! {REVOLUTIONS_TO_WIN} revolutions sustained!'
                 if win
                 else "Game Over! Both rockets lost."
             )
@@ -331,81 +385,71 @@ def main():
                 font.render("Press R to restart", True, WHITE),
                 (WIDTH // 2 - 100, HEIGHT // 2 + 30),
             )
+            
+            if win and not show_graphs:
+                # Create energy plots after winning
+                # RK4 energies
+                fig1, ax1 = plt.subplots()
+                ax1.set_title("RK4 Energies")
+                ax1.plot(
+                    rkrocket.energies["t"],
+                    rkrocket.energies["kin"],
+                    "r-",
+                    label="Kinetic",
+                )
+                ax1.plot(
+                    rkrocket.energies["t"],
+                    rkrocket.energies["pot"],
+                    "b-",
+                    label="Potential",
+                )
+                ax1.plot(
+                    rkrocket.energies["t"],
+                    rkrocket.energies["mech"],
+                    "g-",
+                    label="Mechanical",
+                )
+                ax1.legend()
+                # Verlet energies
+                fig2, ax2 = plt.subplots()
+                ax2.set_title("Verlet Energies")
+                ax2.plot(
+                    vrocket.energies["t"],
+                    vrocket.energies["kin"],
+                    "r-",
+                    label="Kinetic",
+                )
+                ax2.plot(
+                    vrocket.energies["t"],
+                    vrocket.energies["pot"],
+                    "b-",
+                    label="Potential",
+                )
+                ax2.plot(
+                    vrocket.energies["t"],
+                    vrocket.energies["mech"],
+                    "g-",
+                    label="Mechanical",
+                )
+                ax2.legend()
+                # Mechanical comparison
+                fig3, ax3 = plt.subplots()
+                ax3.set_title("Mechanical Energy Comparison")
+                ax3.plot(
+                    rkrocket.energies["t"], rkrocket.energies["mech"], "r-", label="RK4"
+                )
+                ax3.plot(
+                    vrocket.energies["t"],
+                    vrocket.energies["mech"],
+                    "b-",
+                    label="Verlet",
+                )
+                ax3.legend()
+                plt.show()
+                show_graphs = True
 
         pygame.display.flip()
         clock.tick(60)
-
-    # End of main loop: Quit pygame and then show energy plots.
-    pygame.quit()
-
-    # Create energy plots after quitting the game
-    # RK4 Energies
-    fig1, ax1 = plt.subplots()
-    ax1.set_title("RK4 Energies")
-    ax1.plot(
-        rkrocket.energies["t"],
-        rkrocket.energies["kin"],
-        "r-",
-        label="Kinetic",
-    )
-    ax1.plot(
-        rkrocket.energies["t"],
-        rkrocket.energies["pot"],
-        "b-",
-        label="Potential",
-    )
-    ax1.plot(
-        rkrocket.energies["t"],
-        rkrocket.energies["mech"],
-        "g-",
-        label="Mechanical",
-    )
-    ax1.set_xlabel("Time (s)")
-    ax1.set_ylabel("Energy")
-    ax1.legend()
-
-    # Verlet Energies
-    fig2, ax2 = plt.subplots()
-    ax2.set_title("Verlet Energies")
-    ax2.plot(
-        vrocket.energies["t"],
-        vrocket.energies["kin"],
-        "r-",
-        label="Kinetic",
-    )
-    ax2.plot(
-        vrocket.energies["t"],
-        vrocket.energies["pot"],
-        "b-",
-        label="Potential",
-    )
-    ax2.plot(
-        vrocket.energies["t"],
-        vrocket.energies["mech"],
-        "g-",
-        label="Mechanical",
-    )
-    ax2.set_xlabel("Time (s)")
-    ax2.set_ylabel("Energy")
-    ax2.legend()
-
-    # Mechanical energy comparison
-    fig3, ax3 = plt.subplots()
-    ax3.set_title("Mechanical Energy Comparison")
-    ax3.plot(rkrocket.energies["t"], rkrocket.energies["mech"], "r-", label="RK4")
-    ax3.plot(
-        vrocket.energies["t"],
-        vrocket.energies["mech"],
-        "b-",
-        label="Verlet",
-    )
-    ax3.set_xlabel("Time (s)")
-    ax3.set_ylabel("Energy")
-    ax3.legend()
-
-    # Display the plots and block until the windows are closed.
-    plt.show()
-
 
 if __name__ == "__main__":
     main()
